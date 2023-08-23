@@ -70,13 +70,13 @@ app.post("/login/", async (request, response) => {
 
 const authenticationToken = (request, response, next) => {
   let jwtToken;
-  const authHeader = request.headers["authentication"];
+  const authHeader = request.headers["authorization"];
   if (authHeader !== undefined) {
     jwtToken = authHeader.split(" ")[1];
   }
   if (jwtToken === undefined) {
     response.status(401);
-    response.send("Invalid JWT Tokens");
+    response.send("Invalid JWT Token");
   } else {
     jwt.verify(jwtToken, "sdgfryyjvhn", async (error, payload) => {
       if (error) {
@@ -92,7 +92,6 @@ const authenticationToken = (request, response, next) => {
 //Returns a list of all states in the state table
 
 app.get("/states/", authenticationToken, async (request, response) => {
-  console.log("get book api");
   const covidStateQuery = `select * from state`;
   const dbResponse = await db.all(covidStateQuery);
   response.send(
@@ -113,12 +112,19 @@ app.get("/states/:stateId/", authenticationToken, async (request, response) => {
 
 //Create a district in the district table, district_id is auto-incremented
 
-app.post("/districts/", async (request, response) => {
+app.post("/districts/", authenticationToken, async (request, response) => {
   const districtDetail = request.body;
-  const { districtName, cases, cured, active, deaths } = districtDetail;
+  const {
+    districtName,
+    stateId,
+    cases,
+    cured,
+    active,
+    deaths,
+  } = districtDetail;
   const districtDetailQuery = `insert into district 
-    (district_name, cases, cured, active, deaths) values 
-    ('${districtName}', ${cases}, ${cured}, ${active}, ${deaths})`;
+    (district_name,state_id, cases, cured, active, deaths) values 
+    ('${districtName}', ${stateId}, ${cases}, ${cured}, ${active}, ${deaths})`;
   const dbResponse = await db.run(districtDetailQuery);
   const districtId = dbResponse.lastId;
   response.send("District Successfully Added");
@@ -126,51 +132,75 @@ app.post("/districts/", async (request, response) => {
 
 //Returns a district based on the district ID
 
-app.get("/districts/:districtId/", async (request, response) => {
-  const { districtId } = request.params;
-  const districtParticularDetailQuery = `select * from district where 
+app.get(
+  "/districts/:districtId/",
+  authenticationToken,
+  async (request, response) => {
+    const { districtId } = request.params;
+    const districtParticularDetailQuery = `select * from district where 
     district_id = ${districtId}`;
-  const particularDistrict = await db.get(districtParticularDetailQuery);
-  response.send(convertDatabaseObjectToResponseObject(particularDistrict));
-});
+    const particularDistrict = await db.get(districtParticularDetailQuery);
+    response.send(convertDatabaseObjectToResponseObject(particularDistrict));
+  }
+);
 
 //Deletes a district from the district table based on the district ID
 
-app.delete("/districts/:districtId/", async (request, response) => {
-  const { districtId } = request.params;
-  const deleteDistrictQuery = `delete from district where district_id = ${districtId}`;
-  await db.run(deleteDistrictQuery);
-  response.send("District Removed");
-});
+app.delete(
+  "/districts/:districtId/",
+  authenticationToken,
+  async (request, response) => {
+    const { districtId } = request.params;
+    const deleteDistrictQuery = `delete from district where district_id = ${districtId}`;
+    await db.run(deleteDistrictQuery);
+    response.send("District Removed");
+  }
+);
 
 //Updates the details of a specific district based on the district ID
 
-app.put("/districts/:districtId/", async (request, response) => {
-  const { districtId } = request.params;
-  const updateDistrict = request.body;
-  const { districtName, cases, cured, active, deaths } = updateDistrict;
-  const updateDistrictQuery = `update district set 
+app.put(
+  "/districts/:districtId/",
+  authenticationToken,
+  async (request, response) => {
+    const { districtId } = request.params;
+    const updateDistrict = request.body;
+    const {
+      districtName,
+      stateId,
+      cases,
+      cured,
+      active,
+      deaths,
+    } = updateDistrict;
+    const updateDistrictQuery = `update district set 
     district_name = '${districtName}',
+    state_id = '${stateId}',
     cases = ${cases},
     cured = ${cured},
     active = ${active},
     deaths = ${deaths} where district_id = ${districtId}`;
-  await db.run(updateDistrictQuery);
-  response.send("District Details Updated");
-});
+    await db.run(updateDistrictQuery);
+    response.send("District Details Updated");
+  }
+);
 
 //Returns the statistics of total cases, cured, active, deaths of a specific state based on state ID
-app.get("/states/:stateId/stats/", async (request, response) => {
-  const { stateId } = request.params;
-  const getStatesStatsQuery = `select sum(cases),
+app.get(
+  "/states/:stateId/stats/",
+  authenticationToken,
+  async (request, response) => {
+    const { stateId } = request.params;
+    const getStatesStatsQuery = `select sum(cases),
     sum(cured), 
     sum(active), 
     sum(deaths) from district where state_id = ${stateId}`;
-  const stats = await db.get(getStatesStatsQuery);
-  response.send({
-    totalCases: stats["sum(cases)"],
-    totalCured: stats["sum(cured)"],
-    totalActive: stats["sum(active)"],
-    totalDeaths: stats["sum(deaths)"],
-  });
-});
+    const stats = await db.get(getStatesStatsQuery);
+    response.send({
+      totalCases: stats["sum(cases)"],
+      totalCured: stats["sum(cured)"],
+      totalActive: stats["sum(active)"],
+      totalDeaths: stats["sum(deaths)"],
+    });
+  }
+);
